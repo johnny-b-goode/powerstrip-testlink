@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugin>
+	<name>TestLinkPlugin</name>
+	<class>net.scientifichooliganism.testlinkplugin.TestLinkPlugin</class>
+	<config>
+		<id></id>
+		<module>TestLinkPlugin</module>
+		<sequence>0</sequence>
+		<key>active</key>
+		<value>true</value>
+	</config>
+	<config>
+		<id></id>
+		<module>TestLinkPlugin</module>
+		<sequence>1</sequence>
+		<key>storage</key>
+		<value>true</value>
+	</config>
+	<action>
+		<id></id>
+		<name>query</name>
+		<description>Query a TestLink instance.</description>
+		<module>TestLinkPlugin</module>
+		<class>net.scientifichooliganism.testlinkplugin.TestLinkPlugin</class>
+		<!--url></url-->
+		<method>query</method>
+	</action>
+</plugin>
