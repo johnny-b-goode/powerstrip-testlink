@@ -11,7 +11,11 @@ import net.scientifichooliganism.javaplug.interfaces.Store;
 import net.scientifichooliganism.javaplug.vo.Configuration;
 
 import br.eti.kinoshita.testlinkjavaapi.TestLinkAPI;
+import br.eti.kinoshita.testlinkjavaapi.model.Build;
+import br.eti.kinoshita.testlinkjavaapi.model.TestProject;
+import br.eti.kinoshita.testlinkjavaapi.model.TestPlan;
 import br.eti.kinoshita.testlinkjavaapi.util.TestLinkAPIException;
+
 
 public class TestLinkPlugin implements Plugin, Store {
 	private static TestLinkPlugin instance;
@@ -39,6 +43,16 @@ public class TestLinkPlugin implements Plugin, Store {
 		/*What really needs to happen here is that when this method is called
 		DataLayer needs to be queried for all sources, and then each source
 		needs to be turned into a TestLinkAPI object and added to the collection.*/
+		/*Vector configs<Configuration> = DataLayer.getInstance().query("Configuration WHERE Configuration.module = 'TestLinkPlugin'");
+
+		for (Configuration config : configs) {
+			if (config.getKey().equals("TESTLINK_URL")) {
+				//find matching API key
+				//instantiate TestLinkAPI object
+				//add TestLinkAPI Object to collection
+			}
+		}
+		*/
 	}
 
 	public String[][] getActions() {
@@ -91,6 +105,28 @@ public class TestLinkPlugin implements Plugin, Store {
 		System.out.println("About TestLink");
 		System.out.println("===============================================================================");
 		System.out.println(testlinkAPI.about());
+		System.out.println("===============================================================================");
+
+		try {
+			TestProject projects[] = testlinkAPI.getProjects();
+
+			for (TestProject project : projects) {
+				System.out.println("Project: " + project.getName());
+				TestPlan plans[] = testlinkAPI.getProjectTestPlans(project.getId());
+
+				for (TestPlan plan : plans) {
+					System.out.println("	Test Plan: " + plan.getName());
+					Build builds[] = testlinkAPI.getBuildsForTestPlan(plan.getId());
+
+					for (Build build : builds) {
+						System.out.println("		Build: " + build.getName());
+					}
+				}
+			}
+		}
+		catch (Exception exc) {
+			exc.printStackTrace();
+		}
 
 		return new Vector();
 	}
