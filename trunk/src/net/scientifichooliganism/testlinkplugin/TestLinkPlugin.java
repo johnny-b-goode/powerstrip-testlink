@@ -70,6 +70,7 @@ public class TestLinkPlugin implements Plugin, Store {
 
 //START move elsewhere
 		URL testlinkURL = null;
+		TestLinkAPI testlinkAPI = null;
 
 		try	{
 			testlinkURL = new URL(server);
@@ -79,12 +80,17 @@ public class TestLinkPlugin implements Plugin, Store {
 		}
 
 		try	{
-			TestLinkAPI api = new TestLinkAPI(testlinkURL, apiKey);
+			testlinkAPI = new TestLinkAPI(testlinkURL, apiKey);
 		}
 		catch( TestLinkAPIException te) {
 			te.printStackTrace();
 		}
 //END move elsewhere
+
+		System.out.println("===============================================================================");
+		System.out.println("About TestLink");
+		System.out.println("===============================================================================");
+		System.out.println(testlinkAPI.about());
 
 		return new Vector();
 	}
