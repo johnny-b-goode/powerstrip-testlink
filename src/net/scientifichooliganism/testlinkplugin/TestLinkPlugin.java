@@ -11,9 +11,12 @@ import net.scientifichooliganism.javaplug.interfaces.Store;
 import net.scientifichooliganism.javaplug.vo.Configuration;
 
 import br.eti.kinoshita.testlinkjavaapi.TestLinkAPI;
+import br.eti.kinoshita.testlinkjavaapi.constants.TestCaseDetails;
 import br.eti.kinoshita.testlinkjavaapi.model.Build;
+import br.eti.kinoshita.testlinkjavaapi.model.TestCase;
 import br.eti.kinoshita.testlinkjavaapi.model.TestProject;
 import br.eti.kinoshita.testlinkjavaapi.model.TestPlan;
+import br.eti.kinoshita.testlinkjavaapi.model.TestSuite;
 import br.eti.kinoshita.testlinkjavaapi.util.TestLinkAPIException;
 
 
@@ -38,8 +41,8 @@ public class TestLinkPlugin implements Plugin, Store {
 	}
 
 	public void init () {
-		server = "http://<server_base_URL>/lib/api/xmlrpc/v1/xmlrpc.php";
-		apiKey = "<TestLink_API_Key>";
+		server = "http://52.40.4.85/lib/api/xmlrpc/v1/xmlrpc.php";
+		apiKey = "b91742de9a09c3fcd575f94e7ae09cd0";
 		/*What really needs to happen here is that when this method is called
 		DataLayer needs to be queried for all sources, and then each source
 		needs to be turned into a TestLinkAPI object and added to the collection.*/
@@ -117,9 +120,32 @@ public class TestLinkPlugin implements Plugin, Store {
 				for (TestPlan plan : plans) {
 					System.out.println("	Test Plan: " + plan.getName());
 					Build builds[] = testlinkAPI.getBuildsForTestPlan(plan.getId());
+					TestSuite suites[] = testlinkAPI.getTestSuitesForTestPlan(plan.getId());
 
 					for (Build build : builds) {
 						System.out.println("		Build: " + build.getName());
+						//uh, do stuff?
+					}
+
+					/*I am not sure that there are any guarantees within TestLink that Test
+					Cases are associated with a Test Suite. It seems to me that Test Cases
+					are directly associated with Test Plans, which makes me think the relationship
+					between Test Plans and Test Suites is handled automatically in the background.
+					
+					I suspect though, that test cases can be created outside of Test Suites, so I
+					think I will probably need to get everything associated with a Test Suite, then
+					add any straglers using a call to TestLinkAPI.getTestCasesForTestPlan(), which
+					looks like it will require some experimentation (I would guess that not all of
+					the arguments in the method signature are required, allowing the query to be
+					performed based on different criteria).*/
+					for (TestSuite suite : suites) {
+						System.out.println("		Test Suite: " + suite.getName());
+						//I'm totally guessing on the last two parameters here:
+						TestCase cases[] = testlinkAPI.getTestCasesForTestSuite(suite.getId(), true, TestCaseDetails.SUMMARY);
+
+						for (TestCase testCase : cases) {
+							System.out.println("			Test Case: " + testCase.getName());
+						}
 					}
 				}
 			}
