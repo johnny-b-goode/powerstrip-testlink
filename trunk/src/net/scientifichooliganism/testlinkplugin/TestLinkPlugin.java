@@ -1,14 +1,30 @@
 package net.scientifichooliganism.testlinkplugin;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.math.BigInteger;
 import java.net.URL;
 import java.net.MalformedURLException;
-
 import java.util.Collection;
 import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
 
+import net.scientifichooliganism.javaplug.DataLayer;
+import net.scientifichooliganism.javaplug.interfaces.Application;
+import net.scientifichooliganism.javaplug.interfaces.Configuration;
 import net.scientifichooliganism.javaplug.interfaces.Plugin;
+import net.scientifichooliganism.javaplug.interfaces.Release;
 import net.scientifichooliganism.javaplug.interfaces.Store;
-import net.scientifichooliganism.javaplug.vo.Configuration;
+import net.scientifichooliganism.javaplug.interfaces.Task;
+import net.scientifichooliganism.javaplug.interfaces.ValueObject;
+import net.scientifichooliganism.javaplug.query.Query;
+import net.scientifichooliganism.javaplug.vo.BaseApplication;
+import net.scientifichooliganism.javaplug.vo.BaseConfiguration;
+import net.scientifichooliganism.javaplug.vo.BaseRelease;
+import net.scientifichooliganism.javaplug.vo.BaseTask;
 
 import br.eti.kinoshita.testlinkjavaapi.TestLinkAPI;
 import br.eti.kinoshita.testlinkjavaapi.constants.TestCaseDetails;
@@ -19,22 +35,27 @@ import br.eti.kinoshita.testlinkjavaapi.model.TestPlan;
 import br.eti.kinoshita.testlinkjavaapi.model.TestSuite;
 import br.eti.kinoshita.testlinkjavaapi.util.TestLinkAPIException;
 
-
 public class TestLinkPlugin implements Plugin, Store {
+	private static final String idMapFile = "idmap.ser";
 	private static TestLinkPlugin instance;
 	/*The ideal thing is probably going to be to have a collection
 	of TestLinkAPI objects.*/
 	private String server;
 	private String apiKey;
+	private Collection<Configuration> configs;
+	private ConcurrentHashMap<String, String> idMap;
 
-	private TestLinkPlugin (){
+	private TestLinkPlugin () {
 		server = null;
 		apiKey = null;
+		configs = null;
+		idMap = null;
 	}
 
 	public static TestLinkPlugin getInstance () {
 		if (instance == null) {
 			instance = new TestLinkPlugin();
+			instance.init();
 		}
 
 		return instance;
@@ -56,6 +77,25 @@ public class TestLinkPlugin implements Plugin, Store {
 			}
 		}
 		*/
+
+		if (idMap == null) {
+			File f = new File(TestLinkPlugin.idMapFile);
+
+			if (f.exists()) {
+				try {
+					ObjectInputStream ois = new ObjectInputStream(new FileInputStream(f));
+					idMap = (ConcurrentHashMap<String, String>)ois.readObject();
+					ois.close();
+				}
+				catch (Exception exc) {
+					exc.printStackTrace();
+				}
+			}
+		}
+
+		if (idMap == null) {
+			idMap = new ConcurrentHashMap<String, String>();
+		}
 	}
 
 	public String[][] getActions() {
@@ -86,8 +126,9 @@ public class TestLinkPlugin implements Plugin, Store {
 		throw new RuntimeException("TestLinkPlugin.remove(Object) called");
 	}
 
-	public Collection query (String query) throws IllegalArgumentException {
-		System.out.println("TestLinkPlugin.query(String)");
+	public Collection<ValueObject> query (Query query) throws IllegalArgumentException {
+//		System.out.println("TestLinkPlugin.query(String)");
+		Vector<ValueObject> ret = new Vector<ValueObject>();
 
 //START move elsewhere
 		URL testlinkURL = null;
@@ -124,14 +165,13 @@ MetaData is going to be a pain...*/
 
 		try {
 			TestProject projects[] = testlinkAPI.getProjects();
-			Vector ret = new Vector();
 
 			for (TestProject project : projects) {
-				System.out.println("Project: " + project.getName());
+//				System.out.println("Project: " + project.getName());
 				TestPlan plans[] = testlinkAPI.getProjectTestPlans(project.getId());
 
-				if (false) {
-					Application app = Transformer.applicationFromProject(project);
+				if (selectIncludesObject(query, "Application")) {
+					Application app = applicationFromProject(project);
 
 					if (ret.contains(app) == false) {
 						ret.add(app);
@@ -139,15 +179,15 @@ MetaData is going to be a pain...*/
 				}
 
 				for (TestPlan plan : plans) {
-					System.out.println("	Test Plan: " + plan.getName());
+//					System.out.println("	Test Plan: " + plan.getName());
 					Build builds[] = testlinkAPI.getBuildsForTestPlan(plan.getId());
 					TestSuite suites[] = testlinkAPI.getTestSuitesForTestPlan(plan.getId());
 
 					for (Build build : builds) {
-						System.out.println("		Build: " + build.getName());
+//						System.out.println("		Build: " + build.getName());
 
-						if (false) {
-							Release rel = Transformer.releaseFromBuild(build);
+						if (selectIncludesObject(query, "Release")) {
+							Release rel = releaseFromBuild(build);
 
 							if (ret.contains(rel) == false) {
 								ret.add(rel);
@@ -167,7 +207,7 @@ MetaData is going to be a pain...*/
 					the arguments in the method signature are required, allowing the query to be
 					performed based on different criteria).*/
 					for (TestSuite suite : suites) {
-						System.out.println("		Test Suite: " + suite.getName());
+//						System.out.println("		Test Suite: " + suite.getName());
 						//I'm totally guessing on the last two parameters here:
 //						TestCase cases[] = testlinkAPI.getTestCasesForTestSuite(suite.getId(), true, TestCaseDetails.SUMMARY);
 
@@ -180,8 +220,8 @@ MetaData is going to be a pain...*/
 							*/
 //						}
 
-						if (false) {
-							Task task = Transformer.taskFromTestSuite(suite);
+						if (selectIncludesObject(query, "Task")) {
+							Task task = taskFromTestSuite(suite);
 
 							if (ret.contains(task) == false) {
 								ret.add(task);
@@ -198,14 +238,129 @@ MetaData is going to be a pain...*/
 		return ret;
 	}
 
-	public static void main (String [] args) {
+	private String getNextID () {
+		BigInteger biggest = BigInteger.ZERO;
+
+		for (String str : idMap.values()) {
+			BigInteger thisInt = new BigInteger(str);
+
+			if (thisInt.compareTo(biggest) == 1) {
+				biggest = thisInt;
+			}
+		}
+
+		return biggest.add(BigInteger.ONE).toString();
+	}
+
+	private String getMappedID (String className, int objID) {
+		String key = className + "," + String.valueOf(objID);
+		String value = null;
+
+		if (idMap.containsKey(key)) {
+			value = idMap.get(key);
+		}
+
+		if (value == null) {
+//			value = dl.getUniqueID();
+			value = getNextID();
+//			System.out.println("getNextID() returned " + value);
+		}
+
+		if (value == null ) {
+//			throw new RuntimeException ("query(Query) unable to retrieve unique id from DataLayer");
+			System.out.println("ERROR: unable to provide unique ID. Removing object from results...");
+		}
+
+		setMappedID(key, value);
+		return value;
+	}
+
+	private void setMappedID (String key, String value) {
+		idMap.put(key, value);
+		File f = new File(idMapFile);
+
+		if (f.exists()) {
+			try {
+				f.delete();
+			}
+			catch (Exception exc) {
+				exc.printStackTrace();
+			}
+		}
+
 		try {
-			TestLinkPlugin tlp = TestLinkPlugin.getInstance();
-			tlp.init();
-			tlp.query("Release");
+			ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(new File(idMapFile)));
+			oos.writeObject(idMap);
+			oos.close();
 		}
 		catch (Exception exc) {
 			exc.printStackTrace();
+		}
+	}
+
+	private boolean selectIncludesObject (Query qIn, String type) {
+		boolean ret = false;
+
+		for (String object: qIn.getSelectValues()) {
+//			System.out.println("	object: " + object);
+
+			if (type.equals(object)) {
+				ret = true;
+				break;
+			}
+		}
+
+		return ret;
+	}
+
+	private Application applicationFromProject (TestProject tp) {
+		if (tp == null) {
+			throw new IllegalArgumentException("releaseFromBuild(Build): Build is null");
+		}
+
+		BaseApplication ret = new BaseApplication();
+		ret.setID(getMappedID(ret.getClass().getName(), tp.getId()));
+		ret.setName(tp.getName());
+		ret.setDescription(tp.getNotes());
+		//ret.setActive(tp.isActive());
+		return ret;
+	}
+
+	private Release releaseFromBuild (Build bld) throws IllegalArgumentException {
+		if (bld == null) {
+			throw new IllegalArgumentException("releaseFromBuild(Build): Build is null");
+		}
+
+		BaseRelease ret = new BaseRelease();
+		ret.setID(getMappedID(ret.getClass().getName(), bld.getId()));
+		//ret.setApplication();
+		ret.setName(bld.getName());
+		ret.setDescription(bld.getNotes());
+		//ret.setDueDate();
+		//ret.setReleaseDate();
+		return ret;
+	}
+
+	private Task taskFromTestSuite(TestSuite ts) throws IllegalArgumentException {
+		if (ts == null) {
+			throw new IllegalArgumentException("taskFromTestSuite(TestSuite): TestSuite is null");
+		}
+
+		BaseTask ret = new BaseTask();
+		ret.setID(getMappedID(ret.getClass().getName(), ts.getId()));
+		ret.setName(ts.getName());
+		ret.setDescription(ts.getDetails());
+		//ret.setScheduledDuration();
+		//ret.setStartDate();
+		//ret.setCompletedDate();
+		return ret;
+	}
+
+	private void dumpIDMap () {
+		System.out.println("Contents of idMap:");
+
+		for (String key : idMap.keySet()) {
+			System.out.println("	key: " + key + ", value: " + idMap.get(key));
 		}
 	}
 }
