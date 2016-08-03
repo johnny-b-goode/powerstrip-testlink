@@ -41,8 +41,8 @@ public class TestLinkPlugin implements Plugin, Store {
 	}
 
 	public void init () {
-		server = "http://52.40.4.85/lib/api/xmlrpc/v1/xmlrpc.php";
-		apiKey = "b91742de9a09c3fcd575f94e7ae09cd0";
+		server = "http://<server_base_URL>/lib/api/xmlrpc/v1/xmlrpc.php";
+		apiKey = "<TestLink_API_Key>";
 		/*What really needs to happen here is that when this method is called
 		DataLayer needs to be queried for all sources, and then each source
 		needs to be turned into a TestLinkAPI object and added to the collection.*/
@@ -82,6 +82,10 @@ public class TestLinkPlugin implements Plugin, Store {
 		throw new RuntimeException("TestLinkPlugin.persist(Object) called");
 	}
 
+	public void remove (Object in) throws IllegalArgumentException {
+		throw new RuntimeException("TestLinkPlugin.remove(Object) called");
+	}
+
 	public Collection query (String query) throws IllegalArgumentException {
 		System.out.println("TestLinkPlugin.query(String)");
 
@@ -104,18 +108,35 @@ public class TestLinkPlugin implements Plugin, Store {
 		}
 //END move elsewhere
 
-		System.out.println("===============================================================================");
-		System.out.println("About TestLink");
-		System.out.println("===============================================================================");
-		System.out.println(testlinkAPI.about());
-		System.out.println("===============================================================================");
+//		System.out.println("===============================================================================");
+//		System.out.println("About TestLink");
+//		System.out.println("===============================================================================");
+//		System.out.println(testlinkAPI.about());
+//		System.out.println("===============================================================================");
+
+//need code for persisting a unique ID mapping
+
+/*I think what I will do here is look to see what objects are being requested,
+then begin traversing the TestLink object hierarchy, transforming and then
+filtering the list of objects to be returned.
+
+MetaData is going to be a pain...*/
 
 		try {
 			TestProject projects[] = testlinkAPI.getProjects();
+			Vector ret = new Vector();
 
 			for (TestProject project : projects) {
 				System.out.println("Project: " + project.getName());
 				TestPlan plans[] = testlinkAPI.getProjectTestPlans(project.getId());
+
+				if (false) {
+					Application app = Transformer.applicationFromProject(project);
+
+					if (ret.contains(app) == false) {
+						ret.add(app);
+					}
+				}
 
 				for (TestPlan plan : plans) {
 					System.out.println("	Test Plan: " + plan.getName());
@@ -124,14 +145,21 @@ public class TestLinkPlugin implements Plugin, Store {
 
 					for (Build build : builds) {
 						System.out.println("		Build: " + build.getName());
-						//uh, do stuff?
+
+						if (false) {
+							Release rel = Transformer.releaseFromBuild(build);
+
+							if (ret.contains(rel) == false) {
+								ret.add(rel);
+							}
+						}
 					}
 
 					/*I am not sure that there are any guarantees within TestLink that Test
 					Cases are associated with a Test Suite. It seems to me that Test Cases
 					are directly associated with Test Plans, which makes me think the relationship
 					between Test Plans and Test Suites is handled automatically in the background.
-					
+
 					I suspect though, that test cases can be created outside of Test Suites, so I
 					think I will probably need to get everything associated with a Test Suite, then
 					add any straglers using a call to TestLinkAPI.getTestCasesForTestPlan(), which
@@ -141,10 +169,23 @@ public class TestLinkPlugin implements Plugin, Store {
 					for (TestSuite suite : suites) {
 						System.out.println("		Test Suite: " + suite.getName());
 						//I'm totally guessing on the last two parameters here:
-						TestCase cases[] = testlinkAPI.getTestCasesForTestSuite(suite.getId(), true, TestCaseDetails.SUMMARY);
+//						TestCase cases[] = testlinkAPI.getTestCasesForTestSuite(suite.getId(), true, TestCaseDetails.SUMMARY);
 
-						for (TestCase testCase : cases) {
-							System.out.println("			Test Case: " + testCase.getName());
+//						for (TestCase testCase : cases) {
+//							System.out.println("			Test Case: " + testCase.getName());
+							/*According to the TestLink API it is possible to get the steps, represented as TestCaseStep objects
+							comprising the TestCase using TestCase.getSteps(). I was thinking of possibly going to that level of
+							detail to generate Task objects, but that seems excessive. I think it makes more sense, in the context
+							of TestLink, for Tasks to represent what is performed as part of a TestPlan.
+							*/
+//						}
+
+						if (false) {
+							Task task = Transformer.taskFromTestSuite(suite);
+
+							if (ret.contains(task) == false) {
+								ret.add(task);
+							}
 						}
 					}
 				}
@@ -154,7 +195,7 @@ public class TestLinkPlugin implements Plugin, Store {
 			exc.printStackTrace();
 		}
 
-		return new Vector();
+		return ret;
 	}
 
 	public static void main (String [] args) {
