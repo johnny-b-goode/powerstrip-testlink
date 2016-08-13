@@ -2,20 +2,59 @@
 <plugin>
 	<name>TestLinkPlugin</name>
 	<class>net.scientifichooliganism.testlinkplugin.TestLinkPlugin</class>
-	<config>
+	<configuration>
 		<id></id>
 		<module>TestLinkPlugin</module>
 		<sequence>0</sequence>
 		<key>active</key>
 		<value>true</value>
-	</config>
-	<config>
+	</configuration>
+	<configuration>
 		<id></id>
 		<module>TestLinkPlugin</module>
 		<sequence>1</sequence>
 		<key>storage</key>
 		<value>true</value>
-	</config>
+	</configuration>
+	<configuration>
+		<module>TestLinkPlugin</module>
+		<sequence>2</sequence>
+		<key>provides</key>
+		<value>net.scientifichooliganism.javaplug.interfaces.Application</value>
+	</configuration>
+	<configuration>
+		<module>TestLinkPlugin</module>
+		<sequence>3</sequence>
+		<key>provides</key>
+		<value>net.scientifichooliganism.javaplug.interfaces.Release</value>
+	</configuration>
+	<configuration>
+		<module>TestLinkPlugin</module>
+		<sequence>4</sequence>
+		<key>provides</key>
+		<value>net.scientifichooliganism.javaplug.interfaces.Task</value>
+	</configuration>
+	<configuration>
+		<id></id>
+		<module>TestLinkPlugin</module>
+		<sequence>5</sequence>
+		<key>testlink_url</key>
+		<value>http://<server_base_URL>/lib/api/xmlrpc/v1/xmlrpc.php</value>
+	</configuration>
+	<configuration>
+		<id></id>
+		<module>TestLinkPlugin</module>
+		<sequence>6</sequence>
+		<key>api_key</key>
+		<value>TestLink_API_Key</value>
+	</configuration>
+	<configuration>
+		<id></id>
+		<module>TestLinkPlugin</module>
+		<sequence>7</sequence>
+		<key>id_map_file</key>
+		<value>./webapps/ROOT/plugins/TestLinkPlugin/idmap.ser</value>
+	</configuration>
 	<action>
 		<id></id>
 		<name>query</name>
@@ -24,5 +63,14 @@
 		<class>net.scientifichooliganism.testlinkplugin.TestLinkPlugin</class>
 		<!--url></url-->
 		<method>query</method>
+	</action>
+	<action>
+		<id></id>
+		<name>dumpIDMap</name>
+		<description>Dump the contents of the ID map.</description>
+		<module>TestLinkPlugin</module>
+		<class>net.scientifichooliganism.testlinkplugin.TestLinkPlugin</class>
+		<!--url></url-->
+		<method>dumpIDMap</method>
 	</action>
 </plugin>
