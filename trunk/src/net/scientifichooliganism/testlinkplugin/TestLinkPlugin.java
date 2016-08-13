@@ -13,6 +13,7 @@ import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 
 import net.scientifichooliganism.javaplug.DataLayer;
+import net.scientifichooliganism.javaplug.annotations.Param;
 import net.scientifichooliganism.javaplug.interfaces.Application;
 import net.scientifichooliganism.javaplug.interfaces.Configuration;
 import net.scientifichooliganism.javaplug.interfaces.Plugin;
@@ -36,60 +37,165 @@ import br.eti.kinoshita.testlinkjavaapi.model.TestSuite;
 import br.eti.kinoshita.testlinkjavaapi.util.TestLinkAPIException;
 
 public class TestLinkPlugin implements Plugin, Store {
-	private static final String idMapFile = "idmap.ser";
+	private String idMapFile;
 	private static TestLinkPlugin instance;
 	/*The ideal thing is probably going to be to have a collection
 	of TestLinkAPI objects.*/
-	private String server;
-	private String apiKey;
+	private Vector<TestLinkAPI> servers;
 	private Collection<Configuration> configs;
 	private ConcurrentHashMap<String, String> idMap;
+	private boolean isInitialized = false;
 
 	private TestLinkPlugin () {
-		server = null;
-		apiKey = null;
-		configs = null;
+		servers = new Vector<TestLinkAPI>();
+		configs = new Vector<Configuration>();
 		idMap = null;
+		idMapFile = "idmap.ser";
+		//init() cannot be called from the constructor because by the time
+		//that can happen the plugin has already been loaded and the query
+		//action enabled. What happens then is that TestLinkPlugin.query()
+		//is called and the ActionCatalog tries to instantiate a TestLinkPlugin
+		//object, which runs a query using DataLayer, which calls TestLinkPlugin.query().
+		//
+		//This is due in part to some presently missing logic, but also due
+		//to not having good plugin initialization logic (there was something
+		//but we ended up not using it anywhere and by the time I ran into this
+		//problem I had already realized that the mechanism in place is not
+		//sufficiently robust.
 	}
 
 	public static TestLinkPlugin getInstance () {
 		if (instance == null) {
 			instance = new TestLinkPlugin();
-			instance.init();
 		}
 
 		return instance;
 	}
 
 	public void init () {
-		server = "http://<server_base_URL>/lib/api/xmlrpc/v1/xmlrpc.php";
-		apiKey = "<TestLink_API_Key>";
+		isInitialized = true;
+
+		try {
+//			Collection<Configuration> configurations = DataLayer.getInstance().query("Configuration WHERE Configuration.module == \"TestLinkPlugin\"");
+			Collection<Configuration> configurations = DataLayer.getInstance().query("Configuration");
+
+			if ((configurations != null) && (configurations.size() > 0)) {
+				init(configurations);
+			}
+			else {
+				isInitialized = false;
+			}
+		}
+		catch (Exception exc) {
+			exc.printStackTrace();
+		}
+	}
+
+	public void init (Collection<Configuration> in) throws IllegalArgumentException {
+		if (in == null) {
+			throw new IllegalArgumentException("init(Collection<Configuration>) Collection is null");
+		}
+
+		if (in.size() <= 0) {
+			throw new IllegalArgumentException("init(Collection<Configuration>) Collection is empty");
+		}
+
+		for (Configuration config : in) {
+			if (config.getModule().equals("TestLinkPlugin")) {
+				if (! configs.contains(config)) {
+					configs.add(config);
+				}
+			}
+		}
+
 		/*What really needs to happen here is that when this method is called
 		DataLayer needs to be queried for all sources, and then each source
 		needs to be turned into a TestLinkAPI object and added to the collection.*/
-		/*Vector configs<Configuration> = DataLayer.getInstance().query("Configuration WHERE Configuration.module = 'TestLinkPlugin'");
-
 		for (Configuration config : configs) {
-			if (config.getKey().equals("TESTLINK_URL")) {
-				//find matching API key
+			if (config.getKey().trim().toLowerCase().equals("testlink_url")) {
+				String url = config.getValue();
+				String key = null;
+				int seq = config.getSequence();
+				seq++;
+
+				for (Configuration conf : configs) {
+					if (conf.getSequence() == seq) {
+						if (! conf.getKey().trim().toLowerCase().equals("api_key")) {
+							throw new RuntimeException ("sequence " + seq + " does not specify an api_key");
+						}
+
+						key = conf.getValue();
+						break;
+					}
+				}
+
+				if (url == null) {
+					throw new RuntimeException ("init() url is null");
+				}
+
+				if (url.length() <= 0) {
+					throw new RuntimeException ("init() url is empty");
+				}
+
+				if (key == null) {
+					throw new RuntimeException ("init() key is null");
+				}
+
+				if (key.length() <= 0) {
+					throw new RuntimeException ("init() key is empty");
+				}
+
 				//instantiate TestLinkAPI object
+				URL testlinkURL = null;
+				TestLinkAPI testlinkAPI = null;
+
+				try	{
+					testlinkURL = new URL(url);
+				}
+				catch (MalformedURLException mue ) {
+					mue.printStackTrace();
+				}
+
+				try	{
+					testlinkAPI = new TestLinkAPI(testlinkURL, key);
+				}
+				catch( TestLinkAPIException te) {
+					te.printStackTrace();
+				}
+
 				//add TestLinkAPI Object to collection
+				if (testlinkAPI != null) {
+					servers.add(testlinkAPI);
+				}
+			}
+
+			if (config.getKey().trim().toLowerCase().equals("id_map_file")) {
+//				System.out.println("id_map_file: " + config.getValue());
+				if (config.getValue() != null) {
+					if (config.getValue().length() > 0) {
+						idMapFile = config.getValue();
+					}
+				}
 			}
 		}
-		*/
 
 		if (idMap == null) {
-			File f = new File(TestLinkPlugin.idMapFile);
+			try {
+				File f = new File(idMapFile);
 
-			if (f.exists()) {
-				try {
-					ObjectInputStream ois = new ObjectInputStream(new FileInputStream(f));
-					idMap = (ConcurrentHashMap<String, String>)ois.readObject();
-					ois.close();
+				if (f.exists()) {
+					try {
+						ObjectInputStream ois = new ObjectInputStream(new FileInputStream(f));
+						idMap = (ConcurrentHashMap<String, String>)ois.readObject();
+						ois.close();
+					}
+					catch (Exception exc) {
+						exc.printStackTrace();
+					}
 				}
-				catch (Exception exc) {
-					exc.printStackTrace();
-				}
+			}
+			catch (Exception exc) {
+				exc.printStackTrace();
 			}
 		}
 
@@ -128,113 +234,100 @@ public class TestLinkPlugin implements Plugin, Store {
 
 	public Collection<ValueObject> query (Query query) throws IllegalArgumentException {
 //		System.out.println("TestLinkPlugin.query(String)");
+		if (! isInitialized) {
+			init();
+		}
+
+		/*This needs to be fixed, but there is some work that will need to be done in core
+		first.*/
+
 		Vector<ValueObject> ret = new Vector<ValueObject>();
-
-//START move elsewhere
-		URL testlinkURL = null;
-		TestLinkAPI testlinkAPI = null;
-
-		try	{
-			testlinkURL = new URL(server);
-		}
-		catch (MalformedURLException mue ) {
-			mue.printStackTrace();
-		}
-
-		try	{
-			testlinkAPI = new TestLinkAPI(testlinkURL, apiKey);
-		}
-		catch( TestLinkAPIException te) {
-			te.printStackTrace();
-		}
-//END move elsewhere
-
 //		System.out.println("===============================================================================");
 //		System.out.println("About TestLink");
 //		System.out.println("===============================================================================");
 //		System.out.println(testlinkAPI.about());
 //		System.out.println("===============================================================================");
 
-//need code for persisting a unique ID mapping
-
 /*I think what I will do here is look to see what objects are being requested,
 then begin traversing the TestLink object hierarchy, transforming and then
 filtering the list of objects to be returned.
 
 MetaData is going to be a pain...*/
+		for (TestLinkAPI testlinkAPI : servers) {
+			try {
+				TestProject projects[] = testlinkAPI.getProjects();
 
-		try {
-			TestProject projects[] = testlinkAPI.getProjects();
+				for (TestProject project : projects) {
+//					System.out.println("Project: " + project.getName());
+					TestPlan plans[] = testlinkAPI.getProjectTestPlans(project.getId());
 
-			for (TestProject project : projects) {
-//				System.out.println("Project: " + project.getName());
-				TestPlan plans[] = testlinkAPI.getProjectTestPlans(project.getId());
+					if (selectIncludesObject(query, "Application")) {
+						Application app = applicationFromProject(project);
 
-				if (selectIncludesObject(query, "Application")) {
-					Application app = applicationFromProject(project);
-
-					if (ret.contains(app) == false) {
-						ret.add(app);
-					}
-				}
-
-				for (TestPlan plan : plans) {
-//					System.out.println("	Test Plan: " + plan.getName());
-					Build builds[] = testlinkAPI.getBuildsForTestPlan(plan.getId());
-					TestSuite suites[] = testlinkAPI.getTestSuitesForTestPlan(plan.getId());
-
-					for (Build build : builds) {
-//						System.out.println("		Build: " + build.getName());
-
-						if (selectIncludesObject(query, "Release")) {
-							Release rel = releaseFromBuild(build);
-
-							if (ret.contains(rel) == false) {
-								ret.add(rel);
-							}
+						if (ret.contains(app) == false) {
+							ret.add(app);
 						}
 					}
 
-					/*I am not sure that there are any guarantees within TestLink that Test
-					Cases are associated with a Test Suite. It seems to me that Test Cases
-					are directly associated with Test Plans, which makes me think the relationship
-					between Test Plans and Test Suites is handled automatically in the background.
+					for (TestPlan plan : plans) {
+//						System.out.println("	Test Plan: " + plan.getName());
+						Build builds[] = testlinkAPI.getBuildsForTestPlan(plan.getId());
+						TestSuite suites[] = testlinkAPI.getTestSuitesForTestPlan(plan.getId());
 
-					I suspect though, that test cases can be created outside of Test Suites, so I
-					think I will probably need to get everything associated with a Test Suite, then
-					add any straglers using a call to TestLinkAPI.getTestCasesForTestPlan(), which
-					looks like it will require some experimentation (I would guess that not all of
-					the arguments in the method signature are required, allowing the query to be
-					performed based on different criteria).*/
-					for (TestSuite suite : suites) {
-//						System.out.println("		Test Suite: " + suite.getName());
-						//I'm totally guessing on the last two parameters here:
-//						TestCase cases[] = testlinkAPI.getTestCasesForTestSuite(suite.getId(), true, TestCaseDetails.SUMMARY);
+						for (Build build : builds) {
+//							System.out.println("		Build: " + build.getName());
 
-//						for (TestCase testCase : cases) {
-//							System.out.println("			Test Case: " + testCase.getName());
-							/*According to the TestLink API it is possible to get the steps, represented as TestCaseStep objects
-							comprising the TestCase using TestCase.getSteps(). I was thinking of possibly going to that level of
-							detail to generate Task objects, but that seems excessive. I think it makes more sense, in the context
-							of TestLink, for Tasks to represent what is performed as part of a TestPlan.
-							*/
-//						}
+							if (selectIncludesObject(query, "Release")) {
+								Release rel = releaseFromBuild(build);
 
-						if (selectIncludesObject(query, "Task")) {
-							Task task = taskFromTestSuite(suite);
+								if (ret.contains(rel) == false) {
+									ret.add(rel);
+								}
+							}
+						}
 
-							if (ret.contains(task) == false) {
-								ret.add(task);
+						/*I am not sure that there are any guarantees within TestLink that Test
+						Cases are associated with a Test Suite. It seems to me that Test Cases
+						are directly associated with Test Plans, which makes me think the relationship
+						between Test Plans and Test Suites is handled automatically in the background.
+
+						I suspect though, that test cases can be created outside of Test Suites, so I
+						think I will probably need to get everything associated with a Test Suite, then
+						add any straglers using a call to TestLinkAPI.getTestCasesForTestPlan(), which
+						looks like it will require some experimentation (I would guess that not all of
+						the arguments in the method signature are required, allowing the query to be
+						performed based on different criteria).*/
+						for (TestSuite suite : suites) {
+//							System.out.println("		Test Suite: " + suite.getName());
+							//I'm totally guessing on the last two parameters here:
+//							TestCase cases[] = testlinkAPI.getTestCasesForTestSuite(suite.getId(), true, TestCaseDetails.SUMMARY);
+
+//							for (TestCase testCase : cases) {
+//								System.out.println("			Test Case: " + testCase.getName());
+								/*According to the TestLink API it is possible to get the steps, represented as TestCaseStep objects
+								comprising the TestCase using TestCase.getSteps(). I was thinking of possibly going to that level of
+								detail to generate Task objects, but that seems excessive. I think it makes more sense, in the context
+								of TestLink, for Tasks to represent what is performed as part of a TestPlan.
+								*/
+//							}
+
+							if (selectIncludesObject(query, "Task")) {
+								Task task = taskFromTestSuite(suite);
+
+								if (ret.contains(task) == false) {
+									ret.add(task);
+								}
 							}
 						}
 					}
 				}
 			}
-		}
-		catch (Exception exc) {
-			exc.printStackTrace();
+			catch (Exception exc) {
+				exc.printStackTrace();
+			}
 		}
 
+//		dumpIDMap();
 		return ret;
 	}
 
@@ -252,6 +345,10 @@ MetaData is going to be a pain...*/
 		return biggest.add(BigInteger.ONE).toString();
 	}
 
+/*	private String getNextID () {
+		return DataLayer.getInstance().getUniqueID();
+	}
+*/
 	private String getMappedID (String className, int objID) {
 		String key = className + "," + String.valueOf(objID);
 		String value = null;
@@ -359,8 +456,13 @@ MetaData is going to be a pain...*/
 	private void dumpIDMap () {
 		System.out.println("Contents of idMap:");
 
-		for (String key : idMap.keySet()) {
-			System.out.println("	key: " + key + ", value: " + idMap.get(key));
+		if (idMap == null) {
+			System.out.println("	null");
+		}
+		else {
+			for (String key : idMap.keySet()) {
+				System.out.println("	key: " + key + ", value: " + idMap.get(key));
+			}
 		}
 	}
 }
