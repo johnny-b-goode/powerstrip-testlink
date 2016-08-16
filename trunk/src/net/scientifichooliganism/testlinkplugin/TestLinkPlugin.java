@@ -255,6 +255,12 @@ filtering the list of objects to be returned.
 MetaData is going to be a pain...*/
 		for (TestLinkAPI testlinkAPI : servers) {
 			try {
+				String testlinkurl = testlinkAPI.getUrl().toString().trim();
+
+				if (testlinkurl == null) {
+					throw new RuntimeException("TestLinkAPI.getUrl() returned null");
+				}
+
 				TestProject projects[] = testlinkAPI.getProjects();
 
 				for (TestProject project : projects) {
@@ -320,6 +326,10 @@ MetaData is going to be a pain...*/
 							}
 						}
 					}
+				}
+
+				for (ValueObject vo : ret) {
+					vo.setLabel(testlinkurl);
 				}
 			}
 			catch (Exception exc) {
