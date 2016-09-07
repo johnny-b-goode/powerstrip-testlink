@@ -1,12 +1,21 @@
 package net.scientifichooliganism.testlinkplugin;
 
 import net.scientifichooliganism.javaplug.query.Query;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 public class TestLinkPluginTest {
+	private TestLinkPlugin tlp;
 
-	public static void main (String [] args) {
+	@BeforeClass
+	public void init() {
+		tlp = TestLinkPlugin.getInstance();
+	}
+
+	@Test
+	public void queryTest(){
 		try {
-			TestLinkPlugin tlp = TestLinkPlugin.getInstance();
 			tlp.init();
 			tlp.query(new Query("Application"));
 			tlp.query(new Query("Release"));
